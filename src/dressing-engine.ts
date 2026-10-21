@@ -12,11 +12,12 @@ const DEFAULT_STATE:DressingState={
   unlockedRewards:[],
   stats:{
     mirrorCount:0,
+    completeCount:0,
     usedHair:[DEFAULT_APPEARANCE.hair],
     usedMakeup:[DEFAULT_APPEARANCE.makeup],
     usedScent:[DEFAULT_APPEARANCE.scent],
     usedOutfits:[],usedBottoms:[],usedShoes:[],usedAccessories:[],
-    nakedMirrorStreak:0,noBarefootMirrorStreak:0
+    nakedCompleteStreak:0,noBarefootCompleteStreak:0
   },
   dailyFinalLooks:[]
 };
@@ -32,6 +33,11 @@ function arrFor(a:Appearance,c:MultiCategory):string[] {
 function singleDefault(c:SingleCategory):string {
   return c==="hair"?DEFAULT_APPEARANCE.hair:c==="makeup"?DEFAULT_APPEARANCE.makeup:DEFAULT_APPEARANCE.scent;
 }
+/** 今天完成过搭配没有（一天只能完成一次） */
+export function completedToday(state:DressingState|null|undefined,today:string):boolean {
+  return Boolean(state&&state.completedLook&&state.completedLook.date===today);
+}
+
 function signature(a:Appearance):string {
   return JSON.stringify({
     hair:a.hair,makeup:a.makeup,scent:a.scent,
@@ -47,7 +53,7 @@ export class DressingEngine {
       const state=loaded?structuredClone(loaded):cloneDefault();
       const today=this.clock.today();
       let text="";
-      const ctx:{justMirrored?:boolean;selectedItemId?:string;selectedCategory?:string;today:string}={today};
+      const ctx:{justCompleted?:boolean;justMirrored?:boolean;selectedItemId?:string;selectedCategory?:string;today:string}={today};
 
       if(!state.initialized){
         state.initialized=true;
@@ -57,10 +63,10 @@ export class DressingEngine {
 
       switch(cmd.action){
         case "open":
-          text=loaded?this.statusText(state):this.introText();
+          text=loaded?this.statusText(state,today):this.introText();
           break;
         case "status":
-          text=this.statusText(state);
+          text=this.statusText(state,today);
           break;
         case "catalog":
           text=this.catalogText(state,cmd.category&&cmd.category!=="all"?cmd.category:undefined);
@@ -74,10 +80,19 @@ export class DressingEngine {
         case "clear":
           text=this.clearCategory(state,cmd.category??"all");
           break;
+        case "complete":
+          if(completedToday(state,today)){
+            text="今天已经完成过一次搭配了，明天再来。妆台前照样可以换着玩，只是今天不再算数。";
+            break;
+          }
+          this.completeLook(state,today);
+          ctx.justCompleted=true;
+          text=this.lookText(state.appearance,"今天的搭配完成了");
+          break;
         case "mirror":
           this.recordMirror(state,today);
           ctx.justMirrored=true;
-          text=this.mirrorText(state);
+          text=completedToday(state,today)?this.lookText(state.completedLook!.appearance,"镜中今日"):"镜子里是一只裸狐。\n\n今天还没有完成搭配。";
           break;
         case "achievements":
           text=this.achievementText(state);
@@ -89,7 +104,8 @@ export class DressingEngine {
           text="未识别的梳妆指令。";
       }
 
-      const newAchievements=this.achievementSweep(state,ctx);
+      // 成就只在完成搭配的时候判（按完成的那一身）；照镜子的时候只判照镜子那几个。换着玩的时候一个都不判
+      const newAchievements=ctx.justCompleted?this.achievementSweep(state,ctx,"complete"):ctx.justMirrored?this.achievementSweep(state,ctx,"mirror"):[];
       const newRewards=rewardUnlocks(state.unlockedAchievements.length,state.unlockedRewards);
       for(const r of newRewards) state.unlockedRewards.push(r.id);
 
@@ -98,7 +114,7 @@ export class DressingEngine {
   }
 
   private ensureCurrentDay(state:DressingState,today:string){
-    if(!state.currentDay||state.currentDay.date!==today) state.currentDay={date:today,mirrorCount:0,lookSignatures:[]};
+    if(!state.currentDay||state.currentDay.date!==today) state.currentDay={date:today,mirrorCount:0};
   }
 
   private selectItem(state:DressingState,category:Category|"all"|undefined,itemId:string|undefined,ctx:{selectedItemId?:string;selectedCategory?:string}):string{
@@ -111,16 +127,12 @@ export class DressingEngine {
 
     if(category==="hair"||category==="makeup"||category==="scent"){
       state.appearance[category]=itemId;
-      const used=category==="hair"?state.stats.usedHair:category==="makeup"?state.stats.usedMakeup:state.stats.usedScent;
-      pushUnique(used,itemId);
       return `${CATEGORY_LABELS[category]}已改为：${item.name}。`;
     }
 
     const arr=arrFor(state.appearance,category);
     if(arr.includes(itemId)) return `${item.name}已经在当前搭配里。`;
     arr.push(itemId);
-    const used=category==="outfit"?state.stats.usedOutfits:category==="bottom"?state.stats.usedBottoms:category==="shoes"?state.stats.usedShoes:state.stats.usedAccessories;
-    pushUnique(used,itemId);
     return `已加入当前${CATEGORY_LABELS[category]}：${item.name}。`;
   }
 
@@ -154,30 +166,45 @@ export class DressingEngine {
     return `已清空当前${CATEGORY_LABELS[category]}选择。`;
   }
 
-  private recordMirror(state:DressingState,today:string){
-    this.ensureCurrentDay(state,today);
-    const sig=signature(state.appearance);
-    state.stats.mirrorCount+=1;
-    state.currentDay!.mirrorCount+=1;
-    pushUnique(state.currentDay!.lookSignatures,sig);
+  // 完成搭配：这一身就是今天的造型（镜子里照得出的就是它）；“试过几种”、几个连着的都从这一身算
+  private completeLook(state:DressingState,today:string){
+    const a=state.appearance;
+    state.completedLook={date:today,appearance:structuredClone(a)};
+    state.stats.completeCount+=1;
+    pushUnique(state.stats.usedHair,a.hair);
+    pushUnique(state.stats.usedMakeup,a.makeup);
+    pushUnique(state.stats.usedScent,a.scent);
+    for(const id of a.outfits) pushUnique(state.stats.usedOutfits,id);
+    for(const id of a.bottoms) pushUnique(state.stats.usedBottoms,id);
+    for(const id of a.shoes) pushUnique(state.stats.usedShoes,id);
+    for(const id of a.accessories) pushUnique(state.stats.usedAccessories,id);
 
-    if(state.appearance.outfits.includes("outfit_none")) state.stats.nakedMirrorStreak+=1;
-    else state.stats.nakedMirrorStreak=0;
+    if(a.outfits.includes("outfit_none")) state.stats.nakedCompleteStreak+=1;
+    else state.stats.nakedCompleteStreak=0;
 
-    if(state.appearance.shoes.includes("shoes_barefoot")) state.stats.noBarefootMirrorStreak=0;
-    else state.stats.noBarefootMirrorStreak+=1;
+    if(a.shoes.includes("shoes_barefoot")) state.stats.noBarefootCompleteStreak=0;
+    else state.stats.noBarefootCompleteStreak+=1;
 
+    const sig=signature(a);
     const existing=state.dailyFinalLooks.find(x=>x.date===today);
     if(existing) existing.signature=sig;
     else state.dailyFinalLooks.push({date:today,signature:sig});
-    state.dailyFinalLooks.sort((a,b)=>a.date.localeCompare(b.date));
+    state.dailyFinalLooks.sort((x,y)=>x.date.localeCompare(y.date));
     if(state.dailyFinalLooks.length>14) state.dailyFinalLooks=state.dailyFinalLooks.slice(-14);
   }
 
-  private achievementSweep(state:DressingState,ctx:{justMirrored?:boolean;selectedItemId?:string;selectedCategory?:string;today:string}):AchievementUnlock[]{
+  // 照镜子：不限次数，只记照了几回（照到裸狐也算）
+  private recordMirror(state:DressingState,today:string){
+    this.ensureCurrentDay(state,today);
+    state.stats.mirrorCount+=1;
+    state.currentDay!.mirrorCount+=1;
+  }
+
+  private achievementSweep(state:DressingState,ctx:{justCompleted?:boolean;justMirrored?:boolean;selectedItemId?:string;selectedCategory?:string;today:string},phase:"complete"|"mirror"):AchievementUnlock[]{
     const out:AchievementUnlock[]=[];
     for(const a of ACHIEVEMENTS){
       if(state.unlockedAchievements.includes(a.id)) continue;
+      if((a.when??"complete")!==phase) continue;
       if(a.check(state,ctx)){
         state.unlockedAchievements.push(a.id);
         out.push({id:a.id,name:a.name,description:a.description});
@@ -187,18 +214,17 @@ export class DressingEngine {
   }
 
   private introText():string{
-    return `衣柜、妆台和配饰已经准备好了。\n\n你可以自由更换发型、妆面和香气，也可以随意选择衣服、下装、鞋履和配饰。不同单品之间没有搭配限制，可以自由叠穿、混搭，也可以什么都不穿。\n\n换好之后，可以照镜查看当前造型。部分搭配、使用习惯和累计次数会触发隐藏成就；累计解锁一定数量的成就后，还会获得额外的衣物和配饰奖励。`;
+    return `衣柜、妆台和配饰已经准备好了。\n\n你可以自由更换发型、妆面和香气，也可以随意选择衣服、下装、鞋履和配饰。不同单品之间没有搭配限制，可以自由叠穿、混搭，也可以什么都不穿。\n\n换好之后，可以完成搭配：每天只能完成一次，成就只在完成搭配的时候判定。镜子不限次数，只照得出今天完成的那一套；今天还没完成的话，镜子里是一只裸狐。部分搭配、使用习惯和累计次数会触发隐藏成就；累计解锁一定数量的成就后，还会获得额外的衣物和配饰奖励。`;
   }
 
-  private statusText(state:DressingState):string{
-    return this.mirrorText(state,false);
+  private statusText(state:DressingState,today:string):string{
+    return this.lookText(state.appearance,"妆台前眼下的搭配")+`\n\n${completedToday(state,today)?"今天已经完成过搭配了。":"今天还没有完成搭配。"}`;
   }
 
-  private mirrorText(state:DressingState,withHeading=true):string{
-    const a=state.appearance;
+  private lookText(a:Appearance,heading:string):string{
     const fmt=(ids:string[])=>ids.length?ids.map(itemName).join("、"):"无";
     const lines=[
-      withHeading?"镜中今日":"当前造型",
+      heading,
       `梳发：${itemName(a.hair)}`,
       `妆面：${itemName(a.makeup)}`,
       `熏香：${itemName(a.scent)}`,

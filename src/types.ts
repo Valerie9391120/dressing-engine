@@ -39,6 +39,8 @@ export interface TouchedCategories {
 
 export interface DressingStats {
   mirrorCount: number;
+  /** 累计完成搭配几次（一天最多一次） */
+  completeCount: number;
   usedHair: string[];
   usedMakeup: string[];
   usedScent: string[];
@@ -46,8 +48,10 @@ export interface DressingStats {
   usedBottoms: string[];
   usedShoes: string[];
   usedAccessories: string[];
-  nakedMirrorStreak: number;
-  noBarefootMirrorStreak: number;
+  /** 连着几次完成搭配都穿着“不穿” */
+  nakedCompleteStreak: number;
+  /** 连着几次完成搭配都没有跣足 */
+  noBarefootCompleteStreak: number;
 }
 
 export interface DressingState {
@@ -59,7 +63,9 @@ export interface DressingState {
   unlockedAchievements: string[];
   unlockedRewards: string[];
   stats: DressingStats;
-  currentDay?: { date: string; mirrorCount: number; lookSignatures: string[] };
+  currentDay?: { date: string; mirrorCount: number };
+  /** 今天完成的那一套（镜子里只照得出它；date 不是今天就当还没完成） */
+  completedLook?: { date: string; appearance: Appearance };
   dailyFinalLooks: { date: string; signature: string }[];
 }
 
@@ -92,6 +98,7 @@ export type DressingAction =
   | "select"
   | "remove"
   | "clear"
+  | "complete"
   | "mirror"
   | "achievements"
   | "rewards";

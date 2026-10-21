@@ -11,4 +11,5 @@ console.log(await play({action:"open"}));
 console.log("\n---\n"+await play({action:"select",category:"outfit",itemId:"outfit_black_turtleneck"}));
 console.log("\n---\n"+await play({action:"select",category:"bottom",itemId:"bottom_swim"}));
 console.log("\n---\n"+await play({action:"select",category:"shoes",itemId:"shoes_red_heels"}));
+console.log("\n---\n"+await play({action:"complete"}));
 console.log("\n---\n"+await play({action:"mirror"}));

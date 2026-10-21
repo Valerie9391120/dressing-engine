@@ -11,7 +11,9 @@
 - **没有槽位冲突，也没有穿搭合法性检查。**
 - 可以同时穿多套衣服、多条下装、多双鞋、多个同位置配饰。
 - 古今混搭、公服配泳裤、black tie 配跣足，全部允许。
-- `mirror` 负责记录一次完整照镜，并触发需要照镜才能判定的隐藏成就。
+- 换装（`select` / `remove` / `clear`）不限次数，随便玩；换的时候不判任何成就。
+- `complete` 完成今天的搭配：**每天只能一次**。成就只在这一刻判定，按完成的那一身算；“尝试过几种”的统计也只算完成过的搭配。今天完成过以后照样可以换着玩，只是不再算数（见下面“每天一次完成搭配”）。
+- `mirror` 照镜子不限次数，**只照得出今天完成的那一套**；今天还没完成搭配，镜子里是一只裸狐。照镜子只判《照花前后镜》（同一天照 3 次，照到裸狐也算）。
 - 50 个隐藏成就。查询成就时只返回已经点亮的内容。
 - 累计成就达到 3 / 5 / 8 / 12 / 16 / 20 / 24 / 28 / 32 / 36 / 40 / 50 时，会自动解锁隐藏衣饰奖励。
 - 奖励物品未解锁前不会出现在 `catalog`。
@@ -80,7 +82,8 @@ console.log(await play({
   category: "shoes",
   itemId: "shoes_red_heels"
 }));
-console.log(await play({ action: "mirror" }));
+console.log(await play({ action: "complete" })); // 今天的搭配，成就在这时判
+console.log(await play({ action: "mirror" }));   // 照出来的是刚完成的那一套
 ```
 
 ## Tool actions
@@ -88,12 +91,13 @@ console.log(await play({ action: "mirror" }));
 | action | 用途 |
 |---|---|
 | `open` | 首次打开 / 再次进入 |
-| `status` | 查看当前造型，不计照镜 |
+| `status` | 查看妆台前眼下的搭配，以及今天完成过搭配没有；不计照镜 |
 | `catalog` | 查看已开放单品，可指定 category |
 | `select` | 选择单品。单选类别会替换，多选类别会追加 |
 | `remove` | 取下指定单品 |
 | `clear` | 清空一个类别，或 `category="all"` 全部重置 |
-| `mirror` | 正式照镜，记录次数、当日造型和相关连续判定 |
+| `complete` | 完成今天的搭配，每天一次；判定成就、记入“尝试过”和连续判定 |
+| `mirror` | 照镜子，不限次数；只照得出今天完成的那一套，没完成是裸狐 |
 | `achievements` | 只显示已解锁成就 |
 | `rewards` | 只显示已经拿到的累计奖励，以及下一档所需成就数 |
 
@@ -104,6 +108,22 @@ hair / makeup / scent / outfit / bottom / shoes / accessory
 ```
 
 `catalog` 会显示可用 item id。奖励物品只有在真正解锁后才会出现。
+
+## 每天一次完成搭配
+
+- 哪一天由 `DressingClock.today()` 说了算（`YYYY-MM-DD`）。
+- 今天已经完成过：再 `complete` 会被婉拒（“今天已经完成过一次搭配了，明天再来”），状态不变。
+- 调用方最好干脆不给这个选项：`dressingToolSchema(false)` 给出的工具里没有 `complete`。用 `completedToday(state, today)` 判断今天完成过没有。
+
+```ts
+import { completedToday, dressingToolSchema } from "./src/index.js";
+
+const state = await store.load();
+const tool = dressingToolSchema(!completedToday(state, clock.today()));
+```
+
+- `DRESSING_TOOL_SCHEMA` 还在，等于 `dressingToolSchema(true)`。
+- 镜子里照出来的是 `state.completedLook`（日期是今天才算数），不是妆台前眼下的搭配：完成以后再换着玩，镜子里不会变。
 
 ## 关于自由叠穿
 
@@ -119,10 +139,10 @@ black tie + 不穿下装 + 牛津鞋
 
 ## 隐藏成就
 
-共有 50 个。成就判定包括：
+共有 50 个。除了《照花前后镜》在照镜子的时候判，其余都只在完成搭配的时候判，按完成的那一身算。成就判定包括：
 
-- 发型、妆面、香气与单品探索
-- 同日照镜、连续日期造型
+- 发型、妆面、香气与单品探索（只算完成过的搭配里出现过的）
+- 同日照镜、连续几天完成的造型各不相同、连续几次完成搭配
 - 多件叠穿、多配饰、古今混搭
 - 特定核心单品搭配彩蛋
 - 跣足、不穿、特殊大胆衣着

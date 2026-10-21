@@ -4,5 +4,7 @@ dist/
 .env.*
 garden-save.json
 garden-state.json
+dressing-state.json
+dressing-state.json.tmp
 *.local.json
 .DS_Store
