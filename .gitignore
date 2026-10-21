@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+garden-save.json
+garden-state.json
+*.local.json
+.DS_Store
