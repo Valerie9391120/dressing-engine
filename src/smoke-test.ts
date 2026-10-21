@@ -47,6 +47,17 @@ const layered=await engine.execute({action:"status"});
 expect(layered.state.appearance.shoes.length>=3,"multiple shoes should coexist");
 expect(layered.state.appearance.accessories.includes("acc_sunglasses")&&layered.state.appearance.accessories.includes("acc_gold_wire_glasses"),"multiple face accessories should coexist");
 
+
+// Removing the wrong single-select item must not reset the current selection.
+await engine.execute({action:"select",category:"hair",itemId:"hair_wet"});
+const wrongHairRemoval=await engine.execute({action:"remove",itemId:"hair_curls"});
+expect(wrongHairRemoval.state.appearance.hair==="hair_wet","removing an unselected hairstyle must not reset current hair");
+expect(wrongHairRemoval.text.includes("目前并不是当前梳发"),"wrong single-item removal should explain that the item is not active");
+
+// Runtime callers may still pass a bad category even though the tool schema has an enum.
+const badCatalog=await engine.execute({action:"catalog",category:"wardrobe" as any});
+expect(badCatalog.text.includes("没有这个类别"),"invalid catalog category should return a clear error");
+
 // Day records should roll cleanly.
 day="2026-10-22";
 const next=await engine.execute({action:"mirror"});

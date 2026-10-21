@@ -129,6 +129,7 @@ export class DressingEngine {
     const item=ITEMS[itemId];
     const c=item.category;
     if(c==="hair"||c==="makeup"||c==="scent"){
+      if(state.appearance[c]!==itemId) return `${item.name}目前并不是当前${CATEGORY_LABELS[c]}。`;
       const def=singleDefault(c);
       state.appearance[c]=def;
       state.touched[c]=false;
@@ -186,7 +187,7 @@ export class DressingEngine {
   }
 
   private introText():string{
-    return `妆奁已经打开。\n\n这里没有穿搭规则。发式、妆面与香气可以随时更换；衣柜、下装、鞋履与配饰则想叠多少都可以。古今混穿也好，公服配泳裤也好，系统不会阻止你。\n\n换好以后，可以照镜看看。未解锁的成就与累计奖励不会提前剧透。`;
+    return `衣柜、妆台和配饰已经准备好了。\n\n你可以自由更换发型、妆面和香气，也可以随意选择衣服、下装、鞋履和配饰。不同单品之间没有搭配限制，可以自由叠穿、混搭，也可以什么都不穿。\n\n换好之后，可以照镜查看当前造型。部分搭配、使用习惯和累计次数会触发隐藏成就；累计解锁一定数量的成就后，还会获得额外的衣物和配饰奖励。`;
   }
 
   private statusText(state:DressingState):string{
@@ -210,7 +211,9 @@ export class DressingEngine {
   }
 
   private catalogText(state:DressingState,category?:Category):string{
-    const categories:Category[]=category?[category]:["hair","makeup","scent","outfit","bottom","shoes","accessory"];
+    const validCategories:Category[]=["hair","makeup","scent","outfit","bottom","shoes","accessory"];
+    if(category&&!validCategories.includes(category)) return "没有这个类别。可用类别：hair / makeup / scent / outfit / bottom / shoes / accessory。";
+    const categories:Category[]=category?[category]:validCategories;
     const out:string[]=[];
     for(const c of categories){
       out.push(CATEGORY_LABELS[c]);
