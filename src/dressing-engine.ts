@@ -13,9 +13,10 @@ const DEFAULT_STATE:DressingState={
   stats:{
     mirrorCount:0,
     completeCount:0,
-    usedHair:[DEFAULT_APPEARANCE.hair],
-    usedMakeup:[DEFAULT_APPEARANCE.makeup],
-    usedScent:[DEFAULT_APPEARANCE.scent],
+    // “尝试过几种”只算完成过的搭配里出现过的：一开始的披发、素面、不熏香也要穿着完成一回才算
+    usedHair:[],
+    usedMakeup:[],
+    usedScent:[],
     usedOutfits:[],usedBottoms:[],usedShoes:[],usedAccessories:[],
     nakedCompleteStreak:0,noBarefootCompleteStreak:0
   },
@@ -23,6 +24,13 @@ const DEFAULT_STATE:DressingState={
 };
 
 function cloneDefault():DressingState { return structuredClone(DEFAULT_STATE); }
+// 0.1.x 的存档里没有这几个数（那时候数的是照镜）：补上 0，不然加上去成了 NaN
+function normalize(state:DressingState){
+  const s=state.stats;
+  s.completeCount??=0;
+  s.nakedCompleteStreak??=0;
+  s.noBarefootCompleteStreak??=0;
+}
 function pushUnique(arr:string[],id:string){ if(!arr.includes(id)) arr.push(id); }
 function arrFor(a:Appearance,c:MultiCategory):string[] {
   if(c==="outfit") return a.outfits;
@@ -51,6 +59,7 @@ export class DressingEngine {
   async execute(cmd:DressingCommand):Promise<DressingResult>{
     return this.store.update(async loaded=>{
       const state=loaded?structuredClone(loaded):cloneDefault();
+      normalize(state);
       const today=this.clock.today();
       let text="";
       const ctx:{justCompleted?:boolean;justMirrored?:boolean;selectedItemId?:string;selectedCategory?:string;today:string}={today};

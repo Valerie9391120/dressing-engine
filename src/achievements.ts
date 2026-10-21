@@ -50,7 +50,7 @@ function differentDays(state:DressingState,n:number):boolean {
 }
 
 export const ACHIEVEMENTS:AchievementDefinition[]=[
-  {id:"first_mirror",name:"初整衣冠",description:"第一次完成搭配。",check:(s,c)=>Boolean(c.justCompleted)&&Object.values(s.touched).some(Boolean)},
+  {id:"first_mirror",name:"初整衣冠",description:"第一次换装并完成搭配。",check:(s,c)=>Boolean(c.justCompleted)&&Object.values(s.touched).some(Boolean)},
   {id:"change_hair",name:"改头换面",description:"第一次更换与初始不同的发型。",check:s=>s.appearance.hair!=="hair_loose"},
   {id:"hair_3",name:"千丝万缕",description:"尝试 3 种不同发型。",check:s=>usedBaseCount(s.stats.usedHair,"hair")>=3},
   {id:"hair_all",name:"理发店VIP",description:"尝试全部 10 种发型。",check:s=>allBaseUsed(s.stats.usedHair,"hair")},

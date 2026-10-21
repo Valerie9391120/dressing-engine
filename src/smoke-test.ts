@@ -108,4 +108,32 @@ day2="2026-11-07"; await pick("hair","hair_braided"); await finish();           
 expect(has2("naked_3"),"three completions in a row with 不穿 unlock 袒裼裸裎");
 expect(has2("five_looks_day"),"three consecutive days with different completed looks unlock 时尚先锋");
 
+// “尝试过几种”只算完成过的搭配：一开始的披发不先算一种。
+{
+  const store3=new MemoryStore();
+  let day3="2026-12-01";
+  const engine3=new DressingEngine(store3,{today:()=>day3});
+  for (const [d,hair] of [["2026-12-01","hair_wet"],["2026-12-02","hair_short"]] as const) {
+    day3=d;
+    await engine3.execute({action:"select",category:"hair",itemId:hair});
+    await engine3.execute({action:"complete"});
+  }
+  expect(!store3.state!.unlockedAchievements.includes("hair_3"),"two completed hairstyles are not three (the starting 披发 only counts once worn to a completion)");
+  day3="2026-12-03";
+  await engine3.execute({action:"select",category:"hair",itemId:"hair_braided"});
+  await engine3.execute({action:"complete"});
+  expect(store3.state!.unlockedAchievements.includes("hair_3"),"three completed hairstyles unlock 千丝万缕");
+}
+
+// A 0.1.x save (no completion counters yet) keeps working.
+{
+  const store4=new MemoryStore();
+  const old=structuredClone(store.state!) as any;
+  delete old.stats.completeCount;delete old.stats.nakedCompleteStreak;delete old.stats.noBarefootCompleteStreak;delete old.completedLook;
+  store4.state=old;
+  await new DressingEngine(store4,{today:()=>"2026-12-10"}).execute({action:"complete"});
+  const st=store4.state!.stats;
+  expect(st.completeCount===1&&Number.isFinite(st.nakedCompleteStreak)&&Number.isFinite(st.noBarefootCompleteStreak),"an old save gets its new counters filled in");
+}
+
 console.log("Smoke tests passed.");
