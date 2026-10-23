@@ -1,4 +1,5 @@
 import { ACHIEVEMENTS } from "./achievements.js";
+import { BASE_IDS, ITEMS, V1_BASE_IDS } from "./dressing-data.js";
 import { DressingEngine, completedToday } from "./dressing-engine.js";
 import { dressingToolSchema } from "./dressing-tool.js";
 import { rewardUnlocks } from "./rewards.js";
@@ -18,9 +19,17 @@ let day="2026-10-21";
 const engine=new DressingEngine(store,{today:()=>day});
 const has=(id:string)=>store.state!.unlockedAchievements.includes(id);
 
-expect(ACHIEVEMENTS.length===50,"achievement count should be 50");
+expect(ACHIEVEMENTS.length===60,"achievement count should be 60");
+expect(new Set(ACHIEVEMENTS.map(a=>a.id)).size===ACHIEVEMENTS.length,"achievement ids are unique");
 expect(rewardUnlocks(2,[]).length===0,"no reward before 3 achievements");
 expect(rewardUnlocks(50,[]).length===12,"all 12 reward milestones should unlock by 50 achievements");
+expect(ITEMS.reward_supreme_gold_crocs!.description!.startsWith("满 50 成就纪念品"),"the last reward is the 50-achievement keepsake");
+
+// 0.3.0: the new batch is in, the v1 batch is unchanged, “不穿” stays last.
+expect(BASE_IDS.hair.length===12&&BASE_IDS.outfit.length===39&&BASE_IDS.bottom.length===16&&BASE_IDS.accessory.length===50,"0.3.0 adds 2 hairstyles, 12 outfits, 5 bottoms and 16 accessories");
+expect(V1_BASE_IDS.hair.length===10&&V1_BASE_IDS.outfit.length===27&&V1_BASE_IDS.bottom.length===11&&V1_BASE_IDS.shoes.length===13&&V1_BASE_IDS.accessory.length===34,"the v1 batch is still the original items");
+expect(BASE_IDS.outfit.at(-1)==="outfit_none"&&BASE_IDS.bottom.at(-1)==="bottom_none","“不穿” stays last in its column");
+expect(ITEMS.acc_gold_dragon_spine_chain!.name==="黄金龙脊骨背链","龙脊骨, not 龙脊谷");
 await engine.execute({action:"open"});
 
 // Before today's completion the mirror only shows a naked fox; changing clothes alone never unlocks anything.
@@ -134,6 +143,97 @@ expect(has2("five_looks_day"),"three consecutive days with different completed l
   await new DressingEngine(store4,{today:()=>"2026-12-10"}).execute({action:"complete"});
   const st=store4.state!.stats;
   expect(st.completeCount===1&&Number.isFinite(st.nakedCompleteStreak)&&Number.isFinite(st.noBarefootCompleteStreak),"an old save gets its new counters filled in");
+}
+
+// 0.3.0: a fresh save per check; each look is put on from scratch and completed on its own day.
+const fresh=()=>{
+  const st=new MemoryStore();
+  let n=0;
+  const eng=new DressingEngine(st,{today:()=>new Date(Date.UTC(2027,0,1+n)).toISOString().slice(0,10)});
+  const look=async(items:[Category,string][])=>{
+    n+=1;
+    await eng.execute({action:"clear",category:"all"});
+    for (const [category,itemId] of items) {
+      const r=await eng.execute({action:"select",category,itemId});
+      expect(!r.text.includes("没有找到")&&!r.text.includes("还没有解锁"),`${itemId} can be put on`);
+    }
+    return eng.execute({action:"complete"});
+  };
+  return {look,has:(id:string)=>st.state!.unlockedAchievements.includes(id)};
+};
+
+// The ten new achievements.
+{
+  const {look,has}=fresh();
+  await look([["hair","hair_loose_low_bun"]]);
+  expect(has("gentle_husband"),"松散低盘发 unlocks 温柔人夫");
+  await look([["outfit","outfit_wizard_robe"],["accessory","acc_broom"]]);
+  expect(!has("magic_fox_letter"),"robe and broom without the hat are not enough");
+  await look([["outfit","outfit_wizard_robe"],["accessory","acc_broom"],["accessory","acc_wizard_hat"],["bottom","bottom_swim"]]);
+  expect(has("magic_fox_letter"),"robe, broom and hat unlock 魔法狐狐的入学通知书 despite extra items");
+  await look([["outfit","outfit_piggy"]]);
+  expect(has("starch_sausage_calling"),"小猪套装 unlocks 淀粉肠的呼唤");
+  await look([["outfit","outfit_feitian_dance"]]);
+  expect(has("mural_millennium"),"飞天伎乐舞服 unlocks 画壁千年");
+  await look([["accessory","acc_ivory_hu"]]);
+  expect(has("court_brawl"),"牙笏 unlocks 已经装备武器，准备朝堂互殴");
+  await look([["outfit","outfit_gothic_wedding"]]);
+  expect(!has("black_elegy"),"the gothic wedding dress alone is not enough");
+  await look([["outfit","outfit_gothic_wedding"],["accessory","acc_black_lace_veil"]]);
+  expect(has("black_elegy"),"gothic wedding dress and black lace veil unlock 黑色挽歌");
+  await look([["accessory","acc_fox_ears"]]);
+  expect(has("give_it_back"),"妙脆角狐狐耳朵 unlocks 还给你了");
+  await look([["shoes","shoes_xiegong_clogs"]]);
+  expect(has("cloud_ladder"),"谢公屐 unlocks 青云梯");
+  await look([["bottom","bottom_black_stockings"],["bottom","bottom_white_garter_stockings"],["bottom","bottom_purple_lace_briefs"],["bottom","bottom_piggy_dot_briefs"]]);
+  expect(has("bottom_stack_2")&&!has("budget_airline"),"four bottoms: 层层叠叠 yes, 廉航经济舱 not yet");
+  await look([["bottom","bottom_black_stockings"],["bottom","bottom_white_garter_stockings"],["bottom","bottom_purple_lace_briefs"],["bottom","bottom_piggy_dot_briefs"],["bottom","bottom_wave_mermaid_skirt"]]);
+  expect(has("budget_airline"),"five bottoms unlock 廉航经济舱");
+  await look([["outfit","outfit_tropical_grass_skirt"]]);
+  expect(has("sun_sand_waves_cactus"),"热带草裙套装 unlocks 阳光、沙滩、海浪、仙人掌");
+}
+{
+  const {look,has}=fresh();
+  await look([["bottom","bottom_swim"],["bottom","bottom_dark_jeans"]]);
+  expect(has("bottom_stack_2"),"two bottoms at once already count for 层层叠叠");
+}
+
+// The new items join the old hidden achievements through their tags.
+{
+  const {look,has}=fresh();
+  await look([["outfit","outfit_gold_bead_lingerie"]]);
+  expect(has("bold_first"),"黄金珠链内衣 counts as bold (狐狐的诱惑)");
+  await look([["outfit","outfit_baroque_corset"],["bottom","bottom_none"]]);
+  expect(has("bold_bottom_mix"),"巴洛克胸衣 + 不穿下装 unlocks 创新驱动发展");
+  await look([["outfit","outfit_beige_suit"],["shoes","shoes_barefoot"]]);
+  expect(has("formal_barefoot"),"米色西装套装 counts as formal (跣足而游)");
+  await look([["outfit","outfit_gothic_wedding"],["makeup","makeup_full"],["scent","scent_agarwood"]]);
+  expect(has("full_firepower"),"哥特黑婚纱 counts as formal (火力全开)");
+  await look([["accessory","acc_fox_ears"],["accessory","acc_wizard_hat"],["accessory","acc_plain_hair_ribbon"]]);
+  expect(has("head_construction"),"three new head/face accessories unlock 头顶违章建筑");
+  await look([["outfit","outfit_purple_official"],["bottom","bottom_black_stockings"]]);
+  expect(has("mix_genius"),"an ancient formal outfit with the new modern stockings unlocks 混搭天才");
+}
+
+// Changed: 理发店VIP is any 10 hairstyles; 行走的杂货铺 / 裤子也是衣服 / 履迹纷纷 only count the v1 batch.
+{
+  const {look,has}=fresh();
+  const hairs=["hair_side_loose","hair_loose_low_bun","hair_crowned","hair_twintails","hair_side_ponytail","hair_curls","hair_short","hair_low_ponytail","hair_high_ponytail","hair_braided"];
+  for (const h of hairs.slice(0,9)) await look([["hair",h]]);
+  expect(!has("hair_all"),"nine hairstyles are not ten");
+  await look([["hair",hairs[9]!]]);
+  expect(has("hair_all"),"any ten hairstyles (new ones included) unlock 理发店VIP");
+}
+{
+  const {look,has}=fresh();
+  await look(V1_BASE_IDS.accessory.slice(1).map(id=>["accessory",id] as [Category,string]));
+  expect(!has("all_base_accessories"),"one v1 accessory short is not enough");
+  await look(V1_BASE_IDS.accessory.map(id=>["accessory",id] as [Category,string]));
+  expect(has("all_base_accessories"),"all 34 v1 accessories unlock 行走的杂货铺 without the new ones");
+  await look(V1_BASE_IDS.bottom.map(id=>["bottom",id] as [Category,string]));
+  expect(has("bottom_all"),"the 11 v1 bottoms unlock 裤子也是衣服 without the new ones");
+  await look(V1_BASE_IDS.shoes.map(id=>["shoes",id] as [Category,string]));
+  expect(has("shoes_all"),"the 13 v1 shoes unlock 履迹纷纷");
 }
 
 console.log("Smoke tests passed.");
